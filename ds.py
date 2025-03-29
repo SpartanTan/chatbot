@@ -213,7 +213,7 @@ if __name__ == "__main__":
                         f'@file({file_name})', f"\n===== 文件 {file_name} 内容如下 =====\n{file_content}\n===== 结束 =====\n")
             except FileNotFoundError:
                 print(f"❌ 文件未找到: {file_name}")
-                continue
+                exit(1)
             print(f"Reading file {file_name}...")
 
         
