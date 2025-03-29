@@ -202,6 +202,7 @@ if __name__ == "__main__":
             except FileNotFoundError:
                 print(f"❌ 文件未找到: {file_name}")
                 continue
+        print(f"Reading file {file_name}...")
 
         print("🤖: ", end='', flush=True)
         for reasoning, reply in session.get_response(user_input, stream=stream):
