@@ -1,14 +1,9 @@
-from openai import OpenAI
-import readline
 import os
 import argparse
 import re
-from pprint import pprint
 
+from openai import OpenAI
 from prompt_toolkit import PromptSession
-from prompt_toolkit.key_binding import KeyBindings
-from prompt_toolkit.keys import Keys
-
 
 class ChatSession:
     def __init__(self, api_key=None, base_url="https://api.deepseek.com", model="deepseek-chat", system_message="You are a helpful assistant.", cost=False):
@@ -126,41 +121,58 @@ class ChatSession:
                 break
 
 
+from wcwidth import wcswidth
+
 def print_chat_usage(completion):
     stats = completion.usage
     hit = stats.prompt_cache_hit_tokens
     miss = stats.prompt_cache_miss_tokens
 
-    print(f"===== TOKEN 消耗明细 =====")
-    print(f"输入: {stats.prompt_tokens} tokens [缓存命中: {hit} | 未命中: {miss}]")
-    print(f"输出: {stats.completion_tokens} tokens")
-    print(f"总消耗: {stats.total_tokens} tokens")
+    input_tokens = stats.prompt_tokens
+    output_tokens = stats.completion_tokens
+    total_tokens = stats.total_tokens
 
     input_cost = (hit * 0.5 + miss * 2) / 1_000_000
-    output_cost = stats.completion_tokens * 8 / 1_000_000
+    output_cost = output_tokens * 8 / 1_000_000
     total_cost = input_cost + output_cost
 
-    print(f"\n===== 成本明细 =====")
-    print(f"输入成本: ￥{input_cost:.4f} 元")
-    print(f"输出成本: ￥{output_cost:.4f} 元")
-    print(f"预估总成本: ￥{total_cost:.4f} 元")
+    print("\n\n")
 
+    entries = [
+        ("TOKEN 消耗与成本统计", ""),
+        ("输入 Token 数",       f"{input_tokens}（缓存命中: {hit}, 未命中: {miss}）"),
+        ("输出 Token 数",       f"{output_tokens}"),
+        ("总 Token 数",         f"{total_tokens}"),
+        ("", ""),
+        ("输入成本",           f"￥{input_cost:.4f} 元"),
+        ("输出成本",           f"￥{output_cost:.4f} 元"),
+        ("预估总成本",         f"￥{total_cost:.4f} 元")
+    ]
 
-# def get_multiline_input(prompt="Input:"):
-#     """
-#     允许用户输入多行，直到按下空行（回车）时结束输入。
-#     """
-#     lines = []
-#     print(prompt)
-#     while True:
-#         try:
-#             line = input()
-#             if line.strip() == "":  # 输入空行表示结束输入
-#                 break
-#             lines.append(line)
-#         except EOFError:  # 如果按下 Ctrl+D 结束输入
-#             break
-#     return "\n".join(lines)
+    # 构造输出行，计算实际显示宽度
+    content_lines = []
+    max_display_width = 0
+    for left, right in entries:
+        if left == "" and right == "":
+            line = ""
+        elif right:
+            line = f"{left} : {right}"
+        else:
+            line = left
+        content_lines.append(line)
+        max_display_width = max(max_display_width, wcswidth(line))
+
+    # 打印顶部线（按显示宽度 + 左边两个空格缩进 + 右边两个空格）
+    line_width = max_display_width + 2 * 2
+    print(f"╭{'─' * line_width}╮")
+
+    for line in content_lines:
+        if line.strip() == "":
+            print()
+        else:
+            print(f"  {line}")
+
+    print(f"╰{'─' * line_width}╯")
 
 
 def get_multiline_input(prompt="💬 (Shift+Enter 换行，Enter 发送)：\n"):
@@ -202,7 +214,9 @@ if __name__ == "__main__":
             except FileNotFoundError:
                 print(f"❌ 文件未找到: {file_name}")
                 continue
-        print(f"Reading file {file_name}...")
+            print(f"Reading file {file_name}...")
+
+        
 
         print("🤖: ", end='', flush=True)
         for reasoning, reply in session.get_response(user_input, stream=stream):
