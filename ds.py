@@ -4,6 +4,7 @@ import re
 
 from openai import OpenAI
 from prompt_toolkit import PromptSession
+from datetime import datetime
 
 class ChatSession:
     def __init__(self, api_key=None, base_url="https://api.deepseek.com", model="deepseek-chat", system_message="You are a helpful assistant.", cost=False):
@@ -182,6 +183,16 @@ def get_multiline_input(prompt="💬 (Shift+Enter 换行，Enter 发送)：\n"):
     session = PromptSession()
     return session.prompt(prompt, multiline=True)
 
+def create_session_log_file(directory="history"):
+    os.makedirs(directory, exist_ok=True)
+    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    return os.path.join(directory, f"{timestamp}.session")
+
+def append_to_log(file_path, role, content):
+    now = datetime.now().strftime("%H:%M:%S")
+    with open(file_path, "a", encoding="utf-8") as f:
+        f.write(f"[{role} @ {now}]\n{content.strip()}\n\n")
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="DeepSeek Chatbot")
     parser.add_argument('-c', '--cost', action='store_true',
@@ -197,10 +208,13 @@ if __name__ == "__main__":
     }
 
     session = ChatSession(**config)
+    log_file = create_session_log_file()
 
     while True:
         while True:  # 内层循环用于处理输入和文件检查
             user_input = get_multiline_input("💬: ")
+            append_to_log(log_file, "User", user_input)
+
             stream = True
 
             file_refs = re.findall(r'@file\((.*?)\)', user_input)
@@ -224,9 +238,14 @@ if __name__ == "__main__":
                 break  # 文件都找到了，继续处理对话
 
         print("🤖: ", end='', flush=True)
+        
+        reply_accum = ""
         for reasoning, reply in session.get_response(user_input, stream=stream):
             if reasoning:
+                # 不记录 reasoning 到日志
                 print(reasoning, end='', flush=True)
             else:
                 print(reply, end='', flush=True)
+                reply_accum += reply
+        append_to_log(log_file, "Assistant", reply_accum)
         print()
