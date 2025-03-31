@@ -199,24 +199,29 @@ if __name__ == "__main__":
     session = ChatSession(**config)
 
     while True:
-        user_input = get_multiline_input("💬: ")
-        stream = True  # 非流式输出
+        while True:  # 内层循环用于处理输入和文件检查
+            user_input = get_multiline_input("💬: ")
+            stream = True
 
-        # 检查是否包含 @file(...) 引用
-        file_refs = re.findall(r'@file\((.*?)\)', user_input)
-        for file_name in file_refs:
-            try:
-                with open(file_name, 'r', encoding='utf-8') as f:
-                    file_content = f.read()
-                    # 将 @file(...) 替换为实际文件内容
-                    user_input = user_input.replace(
-                        f'@file({file_name})', f"\n===== 文件 {file_name} 内容如下 =====\n{file_content}\n===== 结束 =====\n")
-            except FileNotFoundError:
-                print(f"❌ 文件未找到: {file_name}")
-                exit(1)
-            print(f"Reading file {file_name}...")
+            file_refs = re.findall(r'@file\((.*?)\)', user_input)
+            file_not_found = False
 
-        
+            for file_name in file_refs:
+                try:
+                    with open(file_name, 'r', encoding='utf-8') as f:
+                        file_content = f.read()
+                        user_input = user_input.replace(
+                            f'@file({file_name})',
+                            f"\n===== 文件 {file_name} 内容如下 =====\n{file_content}\n===== 结束 =====\n"
+                        )
+                        print(f"📂 Reading file {file_name}...")
+                except FileNotFoundError:
+                    print(f"❌ 文件未找到: {file_name}")
+                    file_not_found = True
+                    break  # 退出 for 循环，等待重新输入
+
+            if not file_not_found:
+                break  # 文件都找到了，继续处理对话
 
         print("🤖: ", end='', flush=True)
         for reasoning, reply in session.get_response(user_input, stream=stream):
