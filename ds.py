@@ -6,6 +6,11 @@ from openai import OpenAI
 from prompt_toolkit import PromptSession
 from datetime import datetime
 
+from difflib import SequenceMatcher
+
+from colorama import init, Fore, Style
+init(autoreset=True)
+
 class ChatSession:
     def __init__(self, api_key=None, base_url="https://api.deepseek.com", model="deepseek-chat", system_message="You are a helpful assistant.", cost=False):
         """
@@ -183,7 +188,11 @@ def get_multiline_input(prompt="💬 (Shift+Enter 换行，Enter 发送)：\n"):
     session = PromptSession()
     return session.prompt(prompt, multiline=True)
 
-def create_session_log_file(directory="history"):
+def create_session_log_file(directory=None):
+    if directory is None:
+        # 固定为 ds.py 所在目录下的 "history"
+        directory = os.path.join(os.path.dirname(os.path.abspath(__file__)), "history")
+
     os.makedirs(directory, exist_ok=True)
     timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     return os.path.join(directory, f"{timestamp}.session")
@@ -193,10 +202,81 @@ def append_to_log(file_path, role, content):
     with open(file_path, "a", encoding="utf-8") as f:
         f.write(f"[{role} @ {now}]\n{content.strip()}\n\n")
 
+def is_fuzzy_match(line, keyword, threshold=0.6):
+    line_lower = line.lower()
+    keyword_lower = keyword.lower()
+
+    if keyword_lower in line_lower:
+        return True
+
+    # 分词匹配（更丰富的符号）
+    tokens = re.split(r'[\s_\-./\\:()\'"`\[\]{}<>]+', line_lower)
+    if any(keyword_lower in token for token in tokens):
+        print("HIT")
+        return True
+
+    # fallback: fuzzy
+    return SequenceMatcher(None, line_lower, keyword_lower).ratio() >= threshold
+
+def search_history(keyword, max_results=10):
+    from difflib import SequenceMatcher
+    directory = os.path.join(os.path.dirname(os.path.abspath(__file__)), "history")
+    print(f"🔍 正在模糊搜索关键词: \"{keyword}\" ...\n")
+
+    results = []
+    current_block = ""
+    current_header = ""
+
+    for filename in sorted(os.listdir(directory)):
+        if not filename.endswith(".session"):
+            continue
+        path = os.path.join(directory, filename)
+        with open(path, "r", encoding="utf-8") as f:
+            lines = f.readlines()
+
+        for line in lines:
+            if line.startswith("[User") or line.startswith("[Assistant"):
+                # 新段落起始，先处理上一段
+                if current_block.strip():
+                    if is_fuzzy_match(current_block, keyword):
+                        results.append((filename, current_header.strip(), current_block.strip()))
+                current_header = line
+                current_block = ""
+            else:
+                current_block += line
+
+        # 文件结束前最后一段也要处理
+        if current_block.strip() and is_fuzzy_match(current_block, keyword):
+            results.append((filename, current_header.strip(), current_block.strip()))
+
+    if not results:
+        print("❌ 没有找到相关记录。")
+    else:
+        print(f"✅ 找到 {len(results)} 条匹配记录，显示最近 {min(len(results), max_results)} 条：\n")
+        for file, header, block in results[-max_results:]:
+            print(f"📄 {file} | {header}")
+            # print(block)
+            print(highlight_keyword(block, keyword))
+            print("─" * 50)
+
+def highlight_keyword(text, keyword):
+    keyword_lower = keyword.lower()
+    result = ""
+    i = 0
+    while i < len(text):
+        if text[i:i+len(keyword)].lower() == keyword_lower:
+            result += Fore.RED + Style.BRIGHT + text[i:i+len(keyword)] + Style.RESET_ALL
+            i += len(keyword)
+        else:
+            result += text[i]
+            i += 1
+    return result
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="DeepSeek Chatbot")
     parser.add_argument('-c', '--cost', action='store_true',
                         help="打印 token 消耗明细和成本")
+    parser.add_argument('--search', type=str, help="搜索历史记录中的关键词")
     args = parser.parse_args()
 
     config = {
@@ -206,6 +286,11 @@ if __name__ == "__main__":
         "system_message": "You are a helpful assistant.",
         "cost": args.cost
     }
+
+    if args.search:
+        search_history(args.search)
+        exit(0)
+
 
     session = ChatSession(**config)
     log_file = create_session_log_file()
