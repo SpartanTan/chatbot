@@ -75,5 +75,18 @@ Reading file ds.py...
 ...
 ```
 
+每次查询后将会保存对话记录到`history`路径下。可以使用`--search`选项搜索过往对话中的关键词
+```bash
+zhicun@ZEN:~/code/chatbot$ ds --search "ros2"
+🔍 正在模糊搜索关键词: "ros2" ...
+
+✅ 找到 2 条匹配记录，显示最近 2 条：
+
+📄 2025-05-15_21-08-53.session | [Assistant @ 14:39:10]
+在 ROS 中，`rostopic echo` 默认会持续打印指定话题的消息。如果只想打印**一条消息**后自动退出，可以使用以下方法：
+
+---
+```
+
 允许直接输入或者粘贴输入，输入完成后使用`ESC+ENTER`结束输入
 Allow direct input or paste input, and use `ESC+ENTER` to end the input after completion

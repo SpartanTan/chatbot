@@ -273,64 +273,81 @@ def highlight_keyword(text, keyword):
     return result
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="DeepSeek Chatbot")
-    parser.add_argument('-c', '--cost', action='store_true',
-                        help="打印 token 消耗明细和成本")
-    parser.add_argument('--search', type=str, help="搜索历史记录中的关键词")
-    args = parser.parse_args()
+    try:
+        parser = argparse.ArgumentParser(description="DeepSeek Chatbot")
+        parser.add_argument('-c', '--cost', action='store_true',
+                            help="打印 token 消耗明细和成本")
+        parser.add_argument('--search', type=str, help="搜索历史记录中的关键词")
+        args = parser.parse_args()
 
-    config = {
-        # "api_key": "sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
-        "base_url": "https://api.deepseek.com",
-        "model": "deepseek-chat",  # 可以修改为推理模型，比如 "deepseek-reasoner" deepseek-chat
-        "system_message": "You are a helpful assistant.",
-        "cost": args.cost
-    }
+        config = {
+            "base_url": "https://api.deepseek.com",
+            "model": "deepseek-chat",
+            "system_message": "You are a helpful assistant.",
+            "cost": args.cost
+        }
 
-    if args.search:
-        search_history(args.search)
-        exit(0)
+        if args.search:
+            search_history(args.search)
+            exit(0)
 
+        session = ChatSession(**config)
+        log_file = create_session_log_file()
 
-    session = ChatSession(**config)
-    log_file = create_session_log_file()
+        consecutive_interrupts = 0  # 记录连续中断次数
 
-    while True:
-        while True:  # 内层循环用于处理输入和文件检查
-            user_input = get_multiline_input("💬: ")
-            append_to_log(log_file, "User", user_input)
+        while True:
+            try:
+                while True:
+                    try:
+                        user_input = get_multiline_input("💬: ")
+                        consecutive_interrupts = 0  # 一旦输入成功，重置
+                    except KeyboardInterrupt:
+                        consecutive_interrupts += 1
+                        if consecutive_interrupts >= 2:
+                            raise  # 向上层抛出异常，触发退出
+                        print("\n🚪 已中断输入（再次 Ctrl+C 退出程序）")
+                        continue
 
-            stream = True
+                    append_to_log(log_file, "User", user_input)
 
-            file_refs = re.findall(r'@file\((.*?)\)', user_input)
-            file_not_found = False
+                    stream = True
+                    file_refs = re.findall(r'@file\((.*?)\)', user_input)
+                    file_not_found = False
 
-            for file_name in file_refs:
-                try:
-                    with open(file_name, 'r', encoding='utf-8') as f:
-                        file_content = f.read()
-                        user_input = user_input.replace(
-                            f'@file({file_name})',
-                            f"\n===== 文件 {file_name} 内容如下 =====\n{file_content}\n===== 结束 =====\n"
-                        )
-                        print(f"📂 Reading file {file_name}...")
-                except FileNotFoundError:
-                    print(f"❌ 文件未找到: {file_name}")
-                    file_not_found = True
-                    break  # 退出 for 循环，等待重新输入
+                    for file_name in file_refs:
+                        try:
+                            with open(file_name, 'r', encoding='utf-8') as f:
+                                file_content = f.read()
+                                user_input = user_input.replace(
+                                    f'@file({file_name})',
+                                    f"\n===== 文件 {file_name} 内容如下 =====\n{file_content}\n===== 结束 =====\n"
+                                )
+                                print(f"📂 Reading file {file_name}...")
+                        except FileNotFoundError:
+                            print(f"❌ 文件未找到: {file_name}")
+                            file_not_found = True
+                            break
 
-            if not file_not_found:
-                break  # 文件都找到了，继续处理对话
+                    if not file_not_found:
+                        break
 
-        print("🤖: ", end='', flush=True)
-        
-        reply_accum = ""
-        for reasoning, reply in session.get_response(user_input, stream=stream):
-            if reasoning:
-                # 不记录 reasoning 到日志
-                print(reasoning, end='', flush=True)
-            else:
-                print(reply, end='', flush=True)
-                reply_accum += reply
-        append_to_log(log_file, "Assistant", reply_accum)
-        print()
+                print("🤖: ", end='', flush=True)
+                reply_accum = ""
+                for reasoning, reply in session.get_response(user_input, stream=stream):
+                    if reasoning:
+                        print(reasoning, end='', flush=True)
+                    else:
+                        print(reply, end='', flush=True)
+                        reply_accum += reply
+                append_to_log(log_file, "Assistant", reply_accum)
+                print()
+            except KeyboardInterrupt:
+                consecutive_interrupts += 1
+                if consecutive_interrupts >= 2:
+                    raise
+                print("\n🚪 中断当前回复流程（再次 Ctrl+C 退出程序）")
+
+    except KeyboardInterrupt:
+        print("\n👋 已退出程序，再见！")
+
